@@ -1,0 +1,100 @@
+---
+title: "R4DS_ML_Day2"
+author: "Meena"
+date: "`r Sys.Date()`"
+output: 
+  html_document:
+    toc: yes
+    toc_float: yes 
+    highlight: textmate
+    theme: sandstone
+    fig_width: 6
+    fig_height: 6
+    fig_caption: yes
+    df_print: tibble
+editor_options:
+  chunk_output_type: inline
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r library}
+install.packages("caret")
+library(tidyverse)
+library(caret)
+library(pROC)
+```
+
+```{r}
+mor <- read.csv("mortality_1k.csv", stringsAsFactors = TRUE)
+mor$Mortality <- as.factor(mor$Mortality)
+str(mor)
+
+```
+# Step 1: Explore the data
+```{r}
+
+```
+
+# Step 2: Partition the data
+
+```{r}
+set.seed(8)
+#p=0.8 percentage of data for training
+#Mortality - the value to be predicted
+intrain <- createDataPartition(mor$Mortality, p=0.8, list =FALSE)
+#mor[row,col]
+train <- mor[intrain, ]
+test <- mor[-intrain, ]
+
+```
+
+# Step 3: Build and evaluate models
+## Logistic Regression
+```{r}
+#glm - Logistic Regression
+fit.glm <- train(Mortality~.-Patient_ID-Age_group-Race,
+                 data=train,
+                 method = "glm",
+                 family = "binomial",
+                 metric="Accuracy",
+                 trControl = trainControl(method="cv",number=5))
+
+pred.glm <- predict(fit.glm, train)
+confusionMatrix(pred.glm, train$Mortality, mode = "everything")
+
+```
+
+```{r}
+pred.glm <- predict(fit.glm, test)
+confusionMatrix(pred.glm, test$Mortality, mode = "everything")
+```
+
+## knn
+```{r}
+fit.knn <- train(Mortality~.-Patient_ID-Age_group-Race,
+                 data=train,
+                 method = "knn",
+                 metric="Accuracy",
+                 trControl = trainControl(method="cv",number=5))
+
+
+pred.knn <- predict(fit.knn, train)
+confusionMatrix(pred.knn, train$Mortality, mode = "everything")
+
+```
+
+```{r}
+pred.knn <- predict(fit.knn, test)
+confusionMatrix(pred.knn, test$Mortality, mode = "everything")
+```
+
+
+
+
+
+
+
+
