@@ -1,0 +1,242 @@
+---
+title: "Heart Attack Prediction Exploratory Analysis"
+author: "Meena"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Importing Libraries
+
+```{r library, include=FALSE}
+options(repos="https://cran.rstudio.com" )
+install.packages("heatmaply")
+install.packages("heatmap2")
+install.packages("corrplot")
+install.packages("ggplot2")
+install.packages("kernlab")
+install.packages("randomForest")
+install.packages('kableExtra') 
+library(tidyverse)
+library(magrittr) # for %>% 
+library(readxl) # to read xl
+library(Hmisc) # to impute
+library(heatmaply)
+library(corrplot)
+library(ggplot2)
+library(caret)
+library(randomForest)
+library(kableExtra)
+
+
+```
+# Load the Data
+
+```{r load data}
+full_data <- read.csv("Coronary_heart_risk_study.csv")
+str(full_data)
+```
+
+# Cleaning of Data
+## Display the Columns having Null Values
+```{r finding null}
+colSums(is.na(full_data))
+```
+
+## Coerse, Drop, Impute and Recode
+
+```{r clean}
+full_data1 <- full_data[,-3]
+str(full_data1)
+full_data1$male <- as.factor(full_data1$male)
+full_data1$currentSmoker <- as.factor(full_data1$currentSmoker)
+full_data1$prevalentStroke <- as.factor(full_data1$prevalentStroke)
+full_data1$prevalentHyp <- as.factor(full_data1$prevalentHyp)
+full_data1$diabetes <- as.factor(full_data1$diabetes)
+full_data1$BPMeds <- as.factor(full_data1$BPMeds)
+
+str(full_data1)
+
+colSums(is.na(full_data1))
+full_data1$cigsPerDay <- impute(full_data1$cigsPerDay, fun = mean)
+full_data1$BPMeds  <- impute(full_data1$BPMeds , fun = mode)
+full_data1$totChol  <- impute(full_data1$totChol , fun = mean)
+full_data1$BMI  <- impute(full_data1$BMI , fun = mean)
+full_data1$glucose  <- impute(full_data1$glucose , fun = mean)
+full_data1$heartRate  <- impute(full_data1$heartRate , fun = mean)
+full_data1$Gender <- recode(full_data1$male, 
+                            "0" = "Female",
+                            "1" = "Male")
+str(full_data1)
+full_data2 <- full_data1[,-1]
+full_data2$TenYearCHD <- as.factor(full_data2$TenYearCHD)
+head(full_data2)
+str(full_data2)
+```
+# Write Data
+```{r write}
+write.csv(full_data2, file = "coronary_heart_disease_cleaned_data.csv")
+
+```
+
+# Exploring the Data
+
+```{r}
+summary(full_data2)
+
+```
+
+From the above summary,
+    totChol - Min is 107
+            - Max is 696
+            - Median is 234, which concludes the possibility of outliers
+            
+    Similarly for other features like heartRate, glucose, diaBP and sysBP got possible       outliers are present
+
+## Visualizing the Outliers
+```{r outliers}
+outlier_data <- subset(full_data2,select=c(1,3,8,9,10,11,12,13))
+par(mfrow=c(1,4))
+for (i in 1:4){
+  boxplot(outlier_data[,i],
+          main=names(outlier_data)[i])
+}
+
+
+```
+
+```{r}
+outlier_data1 <- subset(full_data2,select=c(10,11,12,13))
+par(mfrow=c(1,4))
+for (i in 1:4){
+  boxplot(outlier_data1[,i],
+          main=names(outlier_data1)[i])
+}
+```
+
+## Distribution of Target Variable
+```{r}
+ggplot(data = full_data2, aes(x=full_data2$TenYearCHD,fill=full_data2$TenYearCHD))+
+  geom_bar()+
+  xlab("Heart Disease")+
+  ylab("count")+
+  ggtitle("Distribution of Target Variable")+
+  scale_fill_discrete(name="Heart Disease",labels=c("Absence","Presence"))+
+  theme_classic()
+
+```
+Seems like, the data is imbalanced, need to normalize the data while building the model.
+
+```{r}
+prop.table(table(full_data2$TenYearCHD))
+```
+
+## Correlation
+
+```{r}
+cor_heart <- cor(full_data2[,c(1,8,9,10,11,12,13)])
+#cor_heart1 <- cor(full_data)
+cor_heart
+corrplot(cor_heart,method = "square")
+
+```
+# Train and Test
+## Split the Dataset 70:30
+
+```{r}
+colnames(full_data2)
+train_rows <- createDataPartition(full_data2$TenYearCHD,p=0.7,list=FALSE)
+train_data <- full_data2[train_rows,]
+test_data <- full_data2[-train_rows,]
+nrow(train_data)/(nrow(train_data)+nrow(test_data))
+
+```
+# Build And Evaluate Model
+## Logistic Regression
+```{r glm}
+Accuracy <- list()
+
+fit.glm <- train(TenYearCHD~.,
+                 data=train_data,
+                 method = "glm",
+                 metric="Accuracy",
+                 preProcess=c("center","scale"),
+                 trControl = trainControl(method="cv",number=5))
+
+pred.glm <- predict(fit.glm,train_data)
+confusionMatrix(pred.glm,train_data$TenYearCHD, mode="everything")
+```
+
+```{r}
+pred.glm <- predict(fit.glm, test_data)
+confMatglm <- confusionMatrix(pred.glm, test_data$TenYearCHD, mode = "everything")
+Accuracy$LogReg <- confMatglm$overall['Accuracy']
+confMatglm
+```
+
+
+## KNN
+```{r knn}
+fit.knn <- train(TenYearCHD~.,
+                 data=train_data,
+                 method = "knn",
+                 metric="Accuracy",
+                 preProcess = c("center","scale"),
+                 trControl = trainControl(method="repeatedcv",number=10, repeats=10))
+
+
+pred.knn <- predict(fit.knn, train_data)
+confusionMatrix(pred.knn, train_data$TenYearCHD, mode = "everything")
+
+```
+```{r}
+pred.knn <- predict(fit.knn, test_data)
+confMatknn <- confusionMatrix(pred.knn, test_data$TenYearCHD, mode = "everything")
+Accuracy$Knn <- confMatknn$overall['Accuracy']
+confMatknn
+```
+
+## Random Forest
+```{r}
+set.seed(20)
+fit.random <- randomForest(TenYearCHD~.,
+                 data=train_data,
+                 importance = TRUE,
+                 ntree = 200)
+
+
+pred.random <- predict(fit.random, train_data)
+confusionMatrix(pred.random, train_data$TenYearCHD, mode = "everything")
+```
+
+```{r}
+pred.random <- predict(fit.random, test_data)
+confMatrandom <- confusionMatrix(pred.random, test_data$TenYearCHD, mode = "everything")
+confMatrandom
+Accuracy$Random <- confMatrandom$overall['Accuracy']
+```
+
+```{r}
+acc_df <- data.frame(Accuracy)
+acc_df %>% kbl()%>%
+  kable_styling()
+
+
+```
+
+```{r}
+summary(fit.glm)$coeff%>% kbl()%>%
+  kable_styling()
+```
+
+
+
+
+
+
+
+
+
